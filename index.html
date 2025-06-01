@@ -99,6 +99,7 @@
             cursor: pointer;
             transition: all 0.3s ease;
             margin-bottom: 30px;
+            min-width: 150px;
         }
 
         .main-button:hover {
@@ -110,6 +111,10 @@
             opacity: 0.6;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .main-button.stop {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
         }
 
         .transcript {
@@ -203,6 +208,17 @@
             margin-bottom: 20px;
             border-left: 4px solid #dc3545;
         }
+
+        .debug {
+            background: #e2e3e5;
+            color: #383d41;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-family: monospace;
+            font-size: 0.8em;
+            text-align: left;
+        }
     </style>
 </head>
 <body>
@@ -212,12 +228,16 @@
         
         <div class="status">
             <div class="status-indicator" id="statusIndicator"></div>
-            <div class="status-text" id="statusText">Click Start to begin listening</div>
+            <div class="status-text" id="statusText">Initializing...</div>
         </div>
 
         <button class="main-button" id="startButton">
             Start Listening
         </button>
+
+        <div id="debugInfo" class="debug">
+            JavaScript Status: Loading...
+        </div>
 
         <div id="errorDiv" class="error" style="display: none;"></div>
 
@@ -250,8 +270,21 @@
     </div>
 
     <script>
+        // Debug logging
+        function log(message) {
+            console.log(message);
+            const debugDiv = document.getElementById('debugInfo');
+            if (debugDiv) {
+                debugDiv.innerHTML += '<br>' + new Date().toLocaleTimeString() + ': ' + message;
+            }
+        }
+
+        log('Script started loading...');
+
         class SlashPandaAssistant {
             constructor() {
+                log('SlashPandaAssistant constructor called');
+                
                 this.isListening = false;
                 this.recognition = null;
                 this.synthesis = window.speechSynthesis;
@@ -260,97 +293,117 @@
                 this.wakeWord = "slashpanda";
                 this.n8nWebhookUrl = "https://n8n.levers.co/webhook-test/bbb46114-3a50-4230-a7c4-87552fc078ec";
                 
-                this.initializeSpeechRecognition();
+                this.updateStatus('idle', 'Click Start to begin listening');
+                
+                // Initialize everything
                 this.setupEventListeners();
+                this.initializeSpeechRecognition();
+                
+                log('SlashPandaAssistant initialized successfully');
             }
 
             setupEventListeners() {
+                log('Setting up event listeners...');
+                
                 const startButton = document.getElementById('startButton');
                 if (startButton) {
-                    startButton.addEventListener('click', () => {
-                        console.log('Button clicked, current listening state:', this.isListening);
+                    // Remove any existing listeners
+                    startButton.onclick = null;
+                    
+                    // Add click listener
+                    startButton.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        log('Button clicked! Current state: ' + this.isListening);
                         this.toggleListening();
                     });
-                    console.log('Event listener attached to start button');
+                    
+                    log('Button event listener attached successfully');
                 } else {
-                    console.error('Start button not found!');
+                    log('ERROR: Start button not found!');
                 }
             }
 
             toggleListening() {
+                log('toggleListening called, current state: ' + this.isListening);
+                
                 if (this.isListening) {
                     this.stopListening();
                 } else {
                     this.startListening();
                 }
             }
-            }
 
             initializeSpeechRecognition() {
-                // Check if we're on HTTPS (required for speech recognition)
-                if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-                    this.showError("Speech recognition requires HTTPS. Please access this site over HTTPS.");
+                log('Initializing speech recognition...');
+                
+                // Check HTTPS requirement
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                    this.showError("Speech recognition requires HTTPS. Current protocol: " + location.protocol);
                     return;
                 }
 
+                // Check browser support
                 if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                    this.showError("Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.");
+                    this.showError("Speech recognition not supported. Please use Chrome, Edge, or Safari.");
                     return;
                 }
 
-                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                this.recognition = new SpeechRecognition();
-                this.recognition.continuous = true;
-                this.recognition.interimResults = false;
-                this.recognition.lang = 'en-US';
+                try {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    this.recognition = new SpeechRecognition();
+                    this.recognition.continuous = true;
+                    this.recognition.interimResults = false;
+                    this.recognition.lang = 'en-US';
 
-                this.recognition.onstart = () => {
-                    console.log('Speech recognition started');
-                    this.updateStatus('listening', 'Listening for "SlashPanda"...');
-                };
+                    this.recognition.onstart = () => {
+                        log('Speech recognition started');
+                        this.updateStatus('listening', 'Listening for "SlashPanda"...');
+                    };
 
-                this.recognition.onresult = (event) => {
-                    const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
-                    console.log('Speech recognition result:', transcript);
-                    this.updateTranscript(transcript);
-                    this.processTranscript(transcript);
-                };
+                    this.recognition.onresult = (event) => {
+                        const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+                        log('Speech result: ' + transcript);
+                        this.updateTranscript(transcript);
+                        this.processTranscript(transcript);
+                    };
 
-                this.recognition.onerror = (event) => {
-                    console.error('Speech recognition error:', event.error);
-                    if (event.error === 'not-allowed') {
-                        this.showError("Microphone access denied. Please allow microphone access and refresh the page.");
-                    } else if (event.error === 'no-speech') {
-                        console.log('No speech detected, continuing...');
-                        return; // Don't show error for no-speech
-                    } else {
-                        this.showError(`Speech recognition error: ${event.error}`);
-                    }
-                    this.stopListening();
-                };
+                    this.recognition.onerror = (event) => {
+                        log('Speech error: ' + event.error);
+                        if (event.error === 'not-allowed') {
+                            this.showError("Microphone access denied. Please allow microphone access and try again.");
+                        } else if (event.error === 'no-speech') {
+                            log('No speech detected, continuing...');
+                            return;
+                        } else {
+                            this.showError(`Speech recognition error: ${event.error}`);
+                        }
+                        this.stopListening();
+                    };
 
-                this.recognition.onend = () => {
-                    console.log('Speech recognition ended, listening state:', this.isListening);
-                    if (this.isListening) {
-                        // Restart recognition if we're still supposed to be listening
-                        setTimeout(() => {
-                            if (this.isListening) {
-                                console.log('Restarting speech recognition...');
-                                try {
-                                    this.recognition.start();
-                                } catch (error) {
-                                    console.log('Could not restart recognition:', error);
+                    this.recognition.onend = () => {
+                        log('Speech recognition ended, should be listening: ' + this.isListening);
+                        if (this.isListening) {
+                            setTimeout(() => {
+                                if (this.isListening) {
+                                    try {
+                                        this.recognition.start();
+                                    } catch (error) {
+                                        log('Error restarting recognition: ' + error);
+                                    }
                                 }
-                            }
-                        }, 100);
-                    }
-                };
+                            }, 100);
+                        }
+                    };
 
-                console.log('Speech recognition initialized successfully');
+                    log('Speech recognition setup complete');
+                } catch (error) {
+                    log('Error setting up speech recognition: ' + error);
+                    this.showError('Failed to initialize speech recognition: ' + error.message);
+                }
             }
 
             startListening() {
-                console.log('startListening called');
+                log('startListening() called');
                 
                 if (!this.recognition) {
                     this.showError("Speech recognition not available");
@@ -361,43 +414,56 @@
                 this.hideError();
                 
                 try {
-                    console.log('Starting speech recognition...');
                     this.recognition.start();
-                    document.getElementById('startButton').textContent = 'Stop Listening';
-                    document.getElementById('startButton').style.background = 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)';
+                    this.updateButtonState(true);
                     this.updateStatus('listening', 'Starting up...');
+                    log('Speech recognition start command sent');
                 } catch (error) {
-                    console.error('Error starting recognition:', error);
-                    this.showError("Could not start speech recognition. Please try again.");
+                    log('Error starting recognition: ' + error);
+                    this.showError("Could not start speech recognition: " + error.message);
                     this.isListening = false;
+                    this.updateButtonState(false);
                 }
             }
 
             stopListening() {
+                log('stopListening() called');
+                
                 this.isListening = false;
                 if (this.recognition) {
                     this.recognition.stop();
                 }
+                this.updateButtonState(false);
                 this.updateStatus('idle', 'Click Start to begin listening');
-                document.getElementById('startButton').textContent = 'Start Listening';
-                document.getElementById('startButton').style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
                 this.endConversation();
             }
 
+            updateButtonState(isListening) {
+                const button = document.getElementById('startButton');
+                if (button) {
+                    if (isListening) {
+                        button.textContent = 'Stop Listening';
+                        button.className = 'main-button stop';
+                    } else {
+                        button.textContent = 'Start Listening';
+                        button.className = 'main-button';
+                    }
+                }
+            }
+
             processTranscript(transcript) {
-                console.log('Processing transcript:', transcript);
+                log('Processing: ' + transcript);
                 
                 if (!this.isInConversation) {
-                    // Look for wake word to start new conversation
+                    // Look for wake word
                     const normalizedTranscript = transcript.toLowerCase().replace(/\s+/g, '');
                     const wakeWordVariations = ['slashpanda', 'slashpandas', 'flashpanda', 'clashpanda'];
                     const foundWakeWord = wakeWordVariations.some(word => normalizedTranscript.includes(word));
 
                     if (foundWakeWord || transcript.toLowerCase().includes('slash panda')) {
-                        // Extract command after wake word
                         let userCommand = transcript;
                         
-                        // Remove wake word variations to get clean command
+                        // Extract command
                         const wakeWords = ['slashpanda', 'slash panda', 'slashpandas', 'slash pandas', 'flashpanda', 'flash panda'];
                         for (const word of wakeWords) {
                             if (transcript.toLowerCase().includes(word)) {
@@ -406,7 +472,7 @@
                             }
                         }
                         
-                        // Handle special commands locally
+                        // Handle special commands
                         if (userCommand.includes('help')) {
                             this.speak("I can help you with tasks, emails, LinkedIn posts, notes, and more. Just say SlashPanda followed by what you want to do!");
                             return;
@@ -418,31 +484,13 @@
                             return;
                         }
 
-                        // Start conversation with n8n
+                        // Start conversation
                         this.startConversationWithN8n(userCommand);
                     }
                 } else {
-                    // We're in a conversation, send user response to n8n
+                    // Continue conversation
                     this.continueConversationWithN8n(transcript);
                 }
-            }
-
-            findMatchingWorkflow(command) {
-                const cmd = command.toLowerCase();
-                
-                // More flexible command matching
-                if (cmd.includes('linkedin') || cmd.includes('post') || cmd.includes('write')) {
-                    return 'write linkedinpost';
-                }
-                if (cmd.includes('task') || cmd.includes('todo') || cmd.includes('to do') || cmd.includes('create')) {
-                    return 'create task';
-                }
-                if (cmd.includes('email') || cmd.includes('mail') || cmd.includes('send')) {
-                    return 'send email';
-                }
-                
-                console.log('No workflow match found for command:', cmd);
-                return null;
             }
 
             async startConversationWithN8n(userCommand) {
@@ -461,17 +509,14 @@
                     
                     this.handleN8nResponse(response);
                 } catch (error) {
-                    console.error('n8n connection error:', error);
-                    this.speak("Sorry, I'm having trouble connecting to my brain. Please try again.");
+                    log('n8n error: ' + error);
+                    this.speak("Sorry, I'm having trouble connecting. Please try again.");
                     this.endConversation();
                 }
             }
 
             async continueConversationWithN8n(userResponse) {
-                if (!this.conversationId) {
-                    console.error('No active conversation');
-                    return;
-                }
+                if (!this.conversationId) return;
                 
                 this.updateStatus('processing', 'Thinking...');
                 
@@ -484,17 +529,16 @@
                     
                     this.handleN8nResponse(response);
                 } catch (error) {
-                    console.error('n8n continuation error:', error);
-                    this.speak("Sorry, I lost track of our conversation. Let's start over.");
+                    log('n8n continuation error: ' + error);
+                    this.speak("Sorry, I lost track. Let's start over.");
                     this.endConversation();
                 }
             }
 
             async callN8nAgent(payload) {
-                console.log('Sending to n8n:', payload);
+                log('Calling n8n with: ' + JSON.stringify(payload));
                 
                 try {
-                    // Make actual call to your n8n webhook
                     const response = await fetch(this.n8nWebhookUrl, {
                         method: 'POST',
                         headers: { 
@@ -505,24 +549,20 @@
                     });
                     
                     if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                        throw new Error(`HTTP ${response.status}`);
                     }
                     
                     const data = await response.json();
-                    console.log('n8n response:', data);
+                    log('n8n responded: ' + JSON.stringify(data));
                     return data;
                     
                 } catch (error) {
-                    console.error('n8n webhook error:', error);
-                    
-                    // Fallback to demo responses if n8n is not available
-                    console.log('Falling back to demo mode...');
+                    log('n8n call failed: ' + error + ', using demo mode');
                     return this.getDemoResponse(payload);
                 }
             }
 
             getDemoResponse(payload) {
-                // Demo responses for testing when n8n is not set up yet
                 if (payload.is_initial_command) {
                     const command = payload.user_input.toLowerCase();
                     
@@ -536,50 +576,38 @@
                         return {
                             conversation_id: payload.conversation_id,
                             status: 'waiting_for_input',
-                            speak: "I'll create a LinkedIn post for you. I see today's AI news includes new reasoning models from OpenAI and enterprise tools from Google. What's your main takeaway from these developments?"
-                        };
-                    } else if (command.includes('email') || command.includes('send') || command.includes('mail')) {
-                        return {
-                            conversation_id: payload.conversation_id,
-                            status: 'waiting_for_input',
-                            speak: "I'll help you compose an email. Who would you like to send it to?"
+                            speak: "I'll create a LinkedIn post for you. What's your main takeaway from today's AI news?"
                         };
                     } else {
                         return {
                             conversation_id: payload.conversation_id,
                             status: 'waiting_for_input',
-                            speak: "I can help you with tasks, emails, LinkedIn posts, and more. What specifically would you like me to help you with?"
+                            speak: "I can help with tasks, emails, LinkedIn posts, and more. What would you like me to help you with?"
                         };
                     }
                 } else {
-                    // Follow-up response
                     return {
                         conversation_id: payload.conversation_id,
                         status: 'complete',
-                        speak: `Got it! I've processed your request: "${payload.user_input}". This is demo mode - connect to your n8n workflow for real functionality.`
+                        speak: `Got it! I've processed "${payload.user_input}". This is demo mode - connect your n8n workflow for real functionality.`
                     };
                 }
             }
 
             handleN8nResponse(response) {
-                console.log('n8n response:', response);
+                log('Handling response: ' + JSON.stringify(response));
                 
                 if (response.status === 'error') {
-                    this.speak("Sorry, something went wrong. Let's try again.");
+                    this.speak("Sorry, something went wrong.");
                     this.endConversation();
                     return;
                 }
                 
-                // Speak the AI agent's response
                 this.speak(response.speak);
                 
                 if (response.status === 'complete') {
-                    // Task is finished, end conversation
-                    setTimeout(() => {
-                        this.endConversation();
-                    }, 3000);
+                    setTimeout(() => this.endConversation(), 3000);
                 } else if (response.status === 'waiting_for_input') {
-                    // AI agent is waiting for more info, stay in conversation
                     this.updateStatus('listening', 'Listening for your response...');
                 }
             }
@@ -588,35 +616,13 @@
                 this.isInConversation = false;
                 this.conversationId = null;
                 this.hideConversationInfo();
-                this.updateStatus('listening', 'Listening for "SlashPanda"...');
-            }
-
-            showConversationInfo() {
-                const workflowInfo = document.getElementById('workflowInfo');
-                const workflowSteps = document.getElementById('workflowSteps');
-                
-                workflowSteps.innerHTML = `
-                    <div class="workflow-step">🤖 Connected to n8n AI Agent</div>
-                    <div class="workflow-step">💬 Conversation ID: ${this.conversationId}</div>
-                    <div class="workflow-step">🎯 Agent is analyzing your request and deciding next steps...</div>
-                `;
-                
-                workflowInfo.style.display = 'block';
-            }
-
-            hideConversationInfo() {
-                document.getElementById('workflowInfo').style.display = 'none';
-            }
-
-            updateResponse(text) {
-                document.getElementById('response').textContent = text;
-            }
-
-            generateConversationId() {
-                return 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                if (this.isListening) {
+                    this.updateStatus('listening', 'Listening for "SlashPanda"...');
+                }
             }
 
             speak(text) {
+                log('Speaking: ' + text);
                 this.updateStatus('speaking', 'Speaking...');
                 this.updateResponse(text);
 
@@ -642,74 +648,73 @@
                 const indicator = document.getElementById('statusIndicator');
                 const statusText = document.getElementById('statusText');
                 
-                indicator.className = `status-indicator ${type}`;
-                statusText.textContent = text;
+                if (indicator) indicator.className = `status-indicator ${type}`;
+                if (statusText) statusText.textContent = text;
             }
 
             updateTranscript(text) {
-                document.getElementById('transcript').textContent = text;
-                
-                // Debug: Show what we're looking for
-                const debugInfo = `Raw: "${text}" | Normalized: "${text.toLowerCase().replace(/\s+/g, '')}"`;
-                console.log('Speech Recognition Debug:', debugInfo);
+                const transcript = document.getElementById('transcript');
+                if (transcript) transcript.textContent = text;
             }
 
             updateResponse(text) {
-                document.getElementById('response').textContent = text;
+                const response = document.getElementById('response');
+                if (response) response.textContent = text;
             }
 
-            showWorkflowInfo(workflow) {
+            showConversationInfo() {
                 const workflowInfo = document.getElementById('workflowInfo');
                 const workflowSteps = document.getElementById('workflowSteps');
                 
-                workflowSteps.innerHTML = workflow.steps.map((step, index) => 
-                    `<div class="workflow-step">${index + 1}. ${step.type === 'speak' ? '🗣️' : '👂'} ${step.message || step.prompt}</div>`
-                ).join('');
+                if (workflowSteps) {
+                    workflowSteps.innerHTML = `
+                        <div class="workflow-step">🤖 Connected to n8n AI Agent</div>
+                        <div class="workflow-step">💬 Conversation ID: ${this.conversationId}</div>
+                        <div class="workflow-step">🎯 Agent is analyzing your request...</div>
+                    `;
+                }
                 
-                workflowInfo.style.display = 'block';
-                this.updateWorkflowInfo();
+                if (workflowInfo) workflowInfo.style.display = 'block';
             }
 
-            updateWorkflowInfo() {
-                const steps = document.querySelectorAll('.workflow-step');
-                steps.forEach((step, index) => {
-                    if (index === this.currentStep) {
-                        step.style.fontWeight = 'bold';
-                        step.style.color = '#155724';
-                        step.style.background = 'rgba(40, 167, 69, 0.1)';
-                        step.style.borderRadius = '5px';
-                        step.style.padding = '5px';
-                    } else if (index < this.currentStep) {
-                        step.style.opacity = '0.6';
-                        step.style.textDecoration = 'line-through';
-                    } else {
-                        step.style.opacity = '0.4';
-                    }
-                });
+            hideConversationInfo() {
+                const workflowInfo = document.getElementById('workflowInfo');
+                if (workflowInfo) workflowInfo.style.display = 'none';
             }
 
-            hideWorkflowInfo() {
-                document.getElementById('workflowInfo').style.display = 'none';
+            generateConversationId() {
+                return 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             }
 
             showError(message) {
+                log('ERROR: ' + message);
                 const errorDiv = document.getElementById('errorDiv');
-                errorDiv.textContent = message;
-                errorDiv.style.display = 'block';
+                if (errorDiv) {
+                    errorDiv.textContent = message;
+                    errorDiv.style.display = 'block';
+                }
             }
 
             hideError() {
-                document.getElementById('errorDiv').style.display = 'none';
+                const errorDiv = document.getElementById('errorDiv');
+                if (errorDiv) errorDiv.style.display = 'none';
             }
         }
 
-        // Global instance
-        let slashPanda;
+        // Initialize when everything is loaded
+        let slashPanda = null;
 
-        // Initialize when page loads
-        window.addEventListener('load', () => {
-            slashPanda = new SlashPandaAssistant();
+        document.addEventListener('DOMContentLoaded', function() {
+            log('DOM loaded, initializing SlashPanda...');
+            try {
+                slashPanda = new SlashPandaAssistant();
+                log('SlashPanda initialized successfully!');
+            } catch (error) {
+                log('Failed to initialize SlashPanda: ' + error);
+            }
         });
+
+        log('Script loaded successfully');
     </script>
 </body>
 </html>
