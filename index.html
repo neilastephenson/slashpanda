@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SlashPanda - Voice Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .logo {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .tagline {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+            padding: 15px;
+            border-radius: 10px;
+            background: #f8f9fa;
+            min-height: 60px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dc3545;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.listening {
+            background: #28a745;
+        }
+
+        .status-indicator.processing {
+            background: #ffc107;
+        }
+
+        .status-indicator.speaking {
+            background: #17a2b8;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .status-text {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .main-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 30px;
+        }
+
+        .main-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .main-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .transcript {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 60px;
+            border-left: 4px solid #667eea;
+        }
+
+        .transcript-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .transcript-text {
+            color: #333;
+            font-style: italic;
+        }
+
+        .response {
+            background: #e8f4f8;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 60px;
+            border-left: 4px solid #17a2b8;
+        }
+
+        .response-label {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .response-text {
+            color: #333;
+        }
+
+        .commands {
+            background: #fff3cd;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: left;
+            border-left: 4px solid #ffc107;
+        }
+
+        .commands h3 {
+            color: #333;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .command-item {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .workflow-info {
+            background: #d4edda;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            border-left: 4px solid #28a745;
+        }
+
+        .workflow-info h4 {
+            color: #155724;
+            margin-bottom: 10px;
+        }
+
+        .workflow-step {
+            color: #155724;
+            margin-bottom: 5px;
+            font-size: 0.9em;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🐼 SlashPanda</div>
+        <div class="tagline">Your Voice-Powered Assistant</div>
+        
+        <div class="status">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <div class="status-text" id="statusText">Click Start to begin listening</div>
+        </div>
+
+        <button class="main-button" id="startButton" onclick="toggleListening()">
+            Start Listening
+        </button>
+
+        <div id="errorDiv" class="error" style="display: none;"></div>
+
+        <div class="transcript">
+            <div class="transcript-label">You said:</div>
+            <div class="transcript-text" id="transcript">Say "SlashPanda [command]" to get started...</div>
+        </div>
+
+        <div class="response">
+            <div class="response-label">SlashPanda:</div>
+            <div class="response-text" id="response">Waiting for your command...</div>
+        </div>
+
+        <div id="workflowInfo" class="workflow-info" style="display: none;">
+            <h4>Current Workflow</h4>
+            <div id="workflowSteps"></div>
+        </div>
+
+        <div class="commands">
+            <h3>Available Commands</h3>
+            <div class="command-item">"SlashPanda write linkedinpost"</div>
+            <div class="command-item">"SlashPanda create task"</div>
+            <div class="command-item">"SlashPanda send email"</div>
+            <div class="command-item">"SlashPanda help"</div>
+            <div class="command-item">"SlashPanda stop"</div>
+        </div>
+    </div>
+
+    <script>
+        class SlashPandaAssistant {
+            constructor() {
+                this.isListening = false;
+                this.recognition = null;
+                this.synthesis = window.speechSynthesis;
+                this.conversationId = null;
+                this.isInConversation = false;
+                this.wakeWord = "slashpanda";
+                this.n8nWebhookUrl = "https://your-n8n-instance.com/webhook/slashpanda"; // Replace with your URL
+                
+                this.initializeSpeechRecognition();
+            }
+            }
+
+            initializeSpeechRecognition() {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    this.showError("Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.");
+                    return;
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                this.recognition = new SpeechRecognition();
+                this.recognition.continuous = true;
+                this.recognition.interimResults = false;
+                this.recognition.lang = 'en-US';
+
+                this.recognition.onstart = () => {
+                    this.updateStatus('listening', 'Listening for "SlashPanda"...');
+                };
+
+                this.recognition.onresult = (event) => {
+                    const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+                    this.updateTranscript(transcript);
+                    this.processTranscript(transcript);
+                };
+
+                this.recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    if (event.error === 'not-allowed') {
+                        this.showError("Microphone access denied. Please allow microphone access and refresh the page.");
+                    } else {
+                        this.showError(`Speech recognition error: ${event.error}`);
+                    }
+                    this.stopListening();
+                };
+
+                this.recognition.onend = () => {
+                    if (this.isListening) {
+                        // Restart recognition if we're still supposed to be listening
+                        setTimeout(() => {
+                            if (this.isListening) {
+                                this.recognition.start();
+                            }
+                        }, 100);
+                    }
+                };
+            }
+
+            startListening() {
+                if (!this.recognition) {
+                    this.showError("Speech recognition not available");
+                    return;
+                }
+
+                this.isListening = true;
+                this.hideError();
+                
+                try {
+                    this.recognition.start();
+                    document.getElementById('startButton').textContent = 'Stop Listening';
+                    document.getElementById('startButton').style.background = 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)';
+                } catch (error) {
+                    console.error('Error starting recognition:', error);
+                    this.showError("Could not start speech recognition. Please try again.");
+                    this.isListening = false;
+                }
+            }
+
+            stopListening() {
+                this.isListening = false;
+                if (this.recognition) {
+                    this.recognition.stop();
+                }
+                this.updateStatus('idle', 'Click Start to begin listening');
+                document.getElementById('startButton').textContent = 'Start Listening';
+                document.getElementById('startButton').style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                this.endConversation();
+            }
+
+            processTranscript(transcript) {
+                console.log('Processing transcript:', transcript);
+                
+                if (!this.isInConversation) {
+                    // Look for wake word to start new conversation
+                    const normalizedTranscript = transcript.toLowerCase().replace(/\s+/g, '');
+                    const wakeWordVariations = ['slashpanda', 'slashpandas', 'flashpanda', 'clashpanda'];
+                    const foundWakeWord = wakeWordVariations.some(word => normalizedTranscript.includes(word));
+
+                    if (foundWakeWord || transcript.toLowerCase().includes('slash panda')) {
+                        // Extract command after wake word
+                        let userCommand = transcript;
+                        
+                        // Remove wake word variations to get clean command
+                        const wakeWords = ['slashpanda', 'slash panda', 'slashpandas', 'slash pandas', 'flashpanda', 'flash panda'];
+                        for (const word of wakeWords) {
+                            if (transcript.toLowerCase().includes(word)) {
+                                userCommand = transcript.toLowerCase().split(word)[1]?.trim() || transcript;
+                                break;
+                            }
+                        }
+                        
+                        // Handle special commands locally
+                        if (userCommand.includes('help')) {
+                            this.speak("I can help you with tasks, emails, LinkedIn posts, notes, and more. Just say SlashPanda followed by what you want to do!");
+                            return;
+                        }
+
+                        if (userCommand.includes('stop')) {
+                            this.speak("Goodbye!");
+                            setTimeout(() => this.stopListening(), 1000);
+                            return;
+                        }
+
+                        // Start conversation with n8n
+                        this.startConversationWithN8n(userCommand);
+                    }
+                } else {
+                    // We're in a conversation, send user response to n8n
+                    this.continueConversationWithN8n(transcript);
+                }
+            }
+
+            findMatchingWorkflow(command) {
+                const cmd = command.toLowerCase();
+                
+                // More flexible command matching
+                if (cmd.includes('linkedin') || cmd.includes('post') || cmd.includes('write')) {
+                    return 'write linkedinpost';
+                }
+                if (cmd.includes('task') || cmd.includes('todo') || cmd.includes('to do') || cmd.includes('create')) {
+                    return 'create task';
+                }
+                if (cmd.includes('email') || cmd.includes('mail') || cmd.includes('send')) {
+                    return 'send email';
+                }
+                
+                console.log('No workflow match found for command:', cmd);
+                return null;
+            }
+
+            async startConversationWithN8n(userCommand) {
+                this.conversationId = this.generateConversationId();
+                this.isInConversation = true;
+                
+                this.updateStatus('processing', 'Processing your request...');
+                this.showConversationInfo();
+                
+                try {
+                    const response = await this.callN8nAgent({
+                        conversation_id: this.conversationId,
+                        user_input: userCommand,
+                        is_initial_command: true
+                    });
+                    
+                    this.handleN8nResponse(response);
+                } catch (error) {
+                    console.error('n8n connection error:', error);
+                    this.speak("Sorry, I'm having trouble connecting to my brain. Please try again.");
+                    this.endConversation();
+                }
+            }
+
+            async continueConversationWithN8n(userResponse) {
+                if (!this.conversationId) {
+                    console.error('No active conversation');
+                    return;
+                }
+                
+                this.updateStatus('processing', 'Thinking...');
+                
+                try {
+                    const response = await this.callN8nAgent({
+                        conversation_id: this.conversationId,
+                        user_input: userResponse,
+                        is_initial_command: false
+                    });
+                    
+                    this.handleN8nResponse(response);
+                } catch (error) {
+                    console.error('n8n continuation error:', error);
+                    this.speak("Sorry, I lost track of our conversation. Let's start over.");
+                    this.endConversation();
+                }
+            }
+
+            async callN8nAgent(payload) {
+                // For demo purposes, return mock intelligent responses
+                // In production, replace with actual fetch to your n8n webhook
+                
+                console.log('Sending to n8n:', payload);
+                
+                // Simulate AI agent responses based on conversation flow
+                if (payload.is_initial_command) {
+                    const command = payload.user_input.toLowerCase();
+                    
+                    if (command.includes('task') || command.includes('todo') || command.includes('create')) {
+                        return {
+                            conversation_id: payload.conversation_id,
+                            status: 'waiting_for_input',
+                            speak: "I'll help you create a task. What would you like to add to your to-do list?"
+                        };
+                    } else if (command.includes('linkedin') || command.includes('post') || command.includes('write')) {
+                        return {
+                            conversation_id: payload.conversation_id,
+                            status: 'waiting_for_input',
+                            speak: "I'll create a LinkedIn post for you. I see today's AI news includes new reasoning models from OpenAI and enterprise tools from Google. What's your main takeaway from these developments?"
+                        };
+                    } else if (command.includes('email') || command.includes('send') || command.includes('mail')) {
+                        return {
+                            conversation_id: payload.conversation_id,
+                            status: 'waiting_for_input',
+                            speak: "I'll help you compose an email. Who would you like to send it to?"
+                        };
+                    } else {
+                        return {
+                            conversation_id: payload.conversation_id,
+                            status: 'waiting_for_input',
+                            speak: "I can help you with tasks, emails, LinkedIn posts, and more. What specifically would you like me to help you with?"
+                        };
+                    }
+                } else {
+                    // This is a follow-up in the conversation
+                    // In real n8n, the AI agent would maintain context and decide next steps
+                    
+                    // Simple demo: after 2-3 exchanges, complete the task
+                    const responses = [
+                        {
+                            conversation_id: payload.conversation_id,
+                            status: 'waiting_for_input',
+                            speak: "Got it! Any due date or additional details for this task?"
+                        },
+                        {
+                            conversation_id: payload.conversation_id,
+                            status: 'complete',
+                            speak: `Perfect! I've created the task "${payload.user_input}" in your Todoist with all the details you mentioned. It's marked as high priority since you're creating it on the go.`,
+                            action_taken: {
+                                tool: 'todoist',
+                                action: 'create_task',
+                                details: payload.user_input
+                            }
+                        }
+                    ];
+                    
+                    // Randomly pick a response for demo (in real n8n, AI would decide)
+                    return responses[Math.floor(Math.random() * responses.length)];
+                }
+                
+                // Uncomment this for production with real n8n:
+                /*
+                const response = await fetch(this.n8nWebhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                return await response.json();
+                */
+            }
+
+            handleN8nResponse(response) {
+                console.log('n8n response:', response);
+                
+                if (response.status === 'error') {
+                    this.speak("Sorry, something went wrong. Let's try again.");
+                    this.endConversation();
+                    return;
+                }
+                
+                // Speak the AI agent's response
+                this.speak(response.speak);
+                
+                if (response.status === 'complete') {
+                    // Task is finished, end conversation
+                    setTimeout(() => {
+                        this.endConversation();
+                    }, 3000);
+                } else if (response.status === 'waiting_for_input') {
+                    // AI agent is waiting for more info, stay in conversation
+                    this.updateStatus('listening', 'Listening for your response...');
+                }
+            }
+
+            endConversation() {
+                this.isInConversation = false;
+                this.conversationId = null;
+                this.hideConversationInfo();
+                this.updateStatus('listening', 'Listening for "SlashPanda"...');
+            }
+
+            showConversationInfo() {
+                const workflowInfo = document.getElementById('workflowInfo');
+                const workflowSteps = document.getElementById('workflowSteps');
+                
+                workflowSteps.innerHTML = `
+                    <div class="workflow-step">🤖 Connected to n8n AI Agent</div>
+                    <div class="workflow-step">💬 Conversation ID: ${this.conversationId}</div>
+                    <div class="workflow-step">🎯 Agent is analyzing your request and deciding next steps...</div>
+                `;
+                
+                workflowInfo.style.display = 'block';
+            }
+
+            hideConversationInfo() {
+                document.getElementById('workflowInfo').style.display = 'none';
+            }
+
+            generateConversationId() {
+                return 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            }
+
+            speak(text) {
+                this.updateStatus('speaking', 'Speaking...');
+                this.updateResponse(text);
+
+                if (this.synthesis.speaking) {
+                    this.synthesis.cancel();
+                }
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = 0.9;
+                utterance.pitch = 1;
+                utterance.volume = 1;
+
+                utterance.onend = () => {
+                    if (this.isListening) {
+                        this.updateStatus('listening', 'Listening...');
+                    }
+                };
+
+                this.synthesis.speak(utterance);
+            }
+
+            updateStatus(type, text) {
+                const indicator = document.getElementById('statusIndicator');
+                const statusText = document.getElementById('statusText');
+                
+                indicator.className = `status-indicator ${type}`;
+                statusText.textContent = text;
+            }
+
+            updateTranscript(text) {
+                document.getElementById('transcript').textContent = text;
+                
+                // Debug: Show what we're looking for
+                const debugInfo = `Raw: "${text}" | Normalized: "${text.toLowerCase().replace(/\s+/g, '')}"`;
+                console.log('Speech Recognition Debug:', debugInfo);
+            }
+
+            updateResponse(text) {
+                document.getElementById('response').textContent = text;
+            }
+
+            showWorkflowInfo(workflow) {
+                const workflowInfo = document.getElementById('workflowInfo');
+                const workflowSteps = document.getElementById('workflowSteps');
+                
+                workflowSteps.innerHTML = workflow.steps.map((step, index) => 
+                    `<div class="workflow-step">${index + 1}. ${step.type === 'speak' ? '🗣️' : '👂'} ${step.message || step.prompt}</div>`
+                ).join('');
+                
+                workflowInfo.style.display = 'block';
+                this.updateWorkflowInfo();
+            }
+
+            updateWorkflowInfo() {
+                const steps = document.querySelectorAll('.workflow-step');
+                steps.forEach((step, index) => {
+                    if (index === this.currentStep) {
+                        step.style.fontWeight = 'bold';
+                        step.style.color = '#155724';
+                        step.style.background = 'rgba(40, 167, 69, 0.1)';
+                        step.style.borderRadius = '5px';
+                        step.style.padding = '5px';
+                    } else if (index < this.currentStep) {
+                        step.style.opacity = '0.6';
+                        step.style.textDecoration = 'line-through';
+                    } else {
+                        step.style.opacity = '0.4';
+                    }
+                });
+            }
+
+            hideWorkflowInfo() {
+                document.getElementById('workflowInfo').style.display = 'none';
+            }
+
+            showError(message) {
+                const errorDiv = document.getElementById('errorDiv');
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+            }
+
+            hideError() {
+                document.getElementById('errorDiv').style.display = 'none';
+            }
+        }
+
+        // Global instance
+        let slashPanda;
+
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            slashPanda = new SlashPandaAssistant();
+        });
+
+        function toggleListening() {
+            if (!slashPanda) return;
+            
+            if (slashPanda.isListening) {
+                slashPanda.stopListening();
+            } else {
+                slashPanda.startListening();
+            }
+        }
+    </script>
+</body>
+</html>
