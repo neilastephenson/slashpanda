@@ -215,7 +215,7 @@
             <div class="status-text" id="statusText">Click Start to begin listening</div>
         </div>
 
-        <button class="main-button" id="startButton" onclick="toggleListening()">
+        <button class="main-button" id="startButton">
             Start Listening
         </button>
 
@@ -232,17 +232,20 @@
         </div>
 
         <div id="workflowInfo" class="workflow-info" style="display: none;">
-            <h4>Current Workflow</h4>
+            <h4>Conversation Status</h4>
             <div id="workflowSteps"></div>
         </div>
 
         <div class="commands">
-            <h3>Available Commands</h3>
-            <div class="command-item">"SlashPanda write linkedinpost"</div>
-            <div class="command-item">"SlashPanda create task"</div>
-            <div class="command-item">"SlashPanda send email"</div>
-            <div class="command-item">"SlashPanda help"</div>
+            <h3>Example Commands</h3>
+            <div class="command-item">"SlashPanda create a task"</div>
+            <div class="command-item">"SlashPanda write a LinkedIn post"</div>
+            <div class="command-item">"SlashPanda send an email"</div>
+            <div class="command-item">"SlashPanda help me with..."</div>
             <div class="command-item">"SlashPanda stop"</div>
+            <div style="text-align: center; margin-top: 15px; font-size: 0.9em; color: #666;">
+                💡 Just speak naturally - the AI agent will understand and ask follow-up questions!
+            </div>
         </div>
     </div>
 
@@ -255,13 +258,41 @@
                 this.conversationId = null;
                 this.isInConversation = false;
                 this.wakeWord = "slashpanda";
-                this.n8nWebhookUrl = "https://n8n.levers.co/webhook-test/bbb46114-3a50-4230-a7c4-87552fc078ec"; // Replace with your URL
+                this.n8nWebhookUrl = "https://n8n.levers.co/webhook-test/bbb46114-3a50-4230-a7c4-87552fc078ec";
                 
                 this.initializeSpeechRecognition();
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                const startButton = document.getElementById('startButton');
+                if (startButton) {
+                    startButton.addEventListener('click', () => {
+                        console.log('Button clicked, current listening state:', this.isListening);
+                        this.toggleListening();
+                    });
+                    console.log('Event listener attached to start button');
+                } else {
+                    console.error('Start button not found!');
+                }
+            }
+
+            toggleListening() {
+                if (this.isListening) {
+                    this.stopListening();
+                } else {
+                    this.startListening();
+                }
             }
             }
 
             initializeSpeechRecognition() {
+                // Check if we're on HTTPS (required for speech recognition)
+                if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                    this.showError("Speech recognition requires HTTPS. Please access this site over HTTPS.");
+                    return;
+                }
+
                 if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                     this.showError("Speech recognition not supported in this browser. Please use Chrome, Edge, or Safari.");
                     return;
@@ -274,11 +305,13 @@
                 this.recognition.lang = 'en-US';
 
                 this.recognition.onstart = () => {
+                    console.log('Speech recognition started');
                     this.updateStatus('listening', 'Listening for "SlashPanda"...');
                 };
 
                 this.recognition.onresult = (event) => {
                     const transcript = event.results[event.results.length - 1][0].transcript.toLowerCase().trim();
+                    console.log('Speech recognition result:', transcript);
                     this.updateTranscript(transcript);
                     this.processTranscript(transcript);
                 };
@@ -287,6 +320,9 @@
                     console.error('Speech recognition error:', event.error);
                     if (event.error === 'not-allowed') {
                         this.showError("Microphone access denied. Please allow microphone access and refresh the page.");
+                    } else if (event.error === 'no-speech') {
+                        console.log('No speech detected, continuing...');
+                        return; // Don't show error for no-speech
                     } else {
                         this.showError(`Speech recognition error: ${event.error}`);
                     }
@@ -294,18 +330,28 @@
                 };
 
                 this.recognition.onend = () => {
+                    console.log('Speech recognition ended, listening state:', this.isListening);
                     if (this.isListening) {
                         // Restart recognition if we're still supposed to be listening
                         setTimeout(() => {
                             if (this.isListening) {
-                                this.recognition.start();
+                                console.log('Restarting speech recognition...');
+                                try {
+                                    this.recognition.start();
+                                } catch (error) {
+                                    console.log('Could not restart recognition:', error);
+                                }
                             }
                         }, 100);
                     }
                 };
+
+                console.log('Speech recognition initialized successfully');
             }
 
             startListening() {
+                console.log('startListening called');
+                
                 if (!this.recognition) {
                     this.showError("Speech recognition not available");
                     return;
@@ -315,9 +361,11 @@
                 this.hideError();
                 
                 try {
+                    console.log('Starting speech recognition...');
                     this.recognition.start();
                     document.getElementById('startButton').textContent = 'Stop Listening';
                     document.getElementById('startButton').style.background = 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)';
+                    this.updateStatus('listening', 'Starting up...');
                 } catch (error) {
                     console.error('Error starting recognition:', error);
                     this.showError("Could not start speech recognition. Please try again.");
@@ -443,12 +491,38 @@
             }
 
             async callN8nAgent(payload) {
-                // For demo purposes, return mock intelligent responses
-                // In production, replace with actual fetch to your n8n webhook
-                
                 console.log('Sending to n8n:', payload);
                 
-                // Simulate AI agent responses based on conversation flow
+                try {
+                    // Make actual call to your n8n webhook
+                    const response = await fetch(this.n8nWebhookUrl, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    console.log('n8n response:', data);
+                    return data;
+                    
+                } catch (error) {
+                    console.error('n8n webhook error:', error);
+                    
+                    // Fallback to demo responses if n8n is not available
+                    console.log('Falling back to demo mode...');
+                    return this.getDemoResponse(payload);
+                }
+            }
+
+            getDemoResponse(payload) {
+                // Demo responses for testing when n8n is not set up yet
                 if (payload.is_initial_command) {
                     const command = payload.user_input.toLowerCase();
                     
@@ -478,41 +552,13 @@
                         };
                     }
                 } else {
-                    // This is a follow-up in the conversation
-                    // In real n8n, the AI agent would maintain context and decide next steps
-                    
-                    // Simple demo: after 2-3 exchanges, complete the task
-                    const responses = [
-                        {
-                            conversation_id: payload.conversation_id,
-                            status: 'waiting_for_input',
-                            speak: "Got it! Any due date or additional details for this task?"
-                        },
-                        {
-                            conversation_id: payload.conversation_id,
-                            status: 'complete',
-                            speak: `Perfect! I've created the task "${payload.user_input}" in your Todoist with all the details you mentioned. It's marked as high priority since you're creating it on the go.`,
-                            action_taken: {
-                                tool: 'todoist',
-                                action: 'create_task',
-                                details: payload.user_input
-                            }
-                        }
-                    ];
-                    
-                    // Randomly pick a response for demo (in real n8n, AI would decide)
-                    return responses[Math.floor(Math.random() * responses.length)];
+                    // Follow-up response
+                    return {
+                        conversation_id: payload.conversation_id,
+                        status: 'complete',
+                        speak: `Got it! I've processed your request: "${payload.user_input}". This is demo mode - connect to your n8n workflow for real functionality.`
+                    };
                 }
-                
-                // Uncomment this for production with real n8n:
-                /*
-                const response = await fetch(this.n8nWebhookUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                return await response.json();
-                */
             }
 
             handleN8nResponse(response) {
@@ -560,6 +606,10 @@
 
             hideConversationInfo() {
                 document.getElementById('workflowInfo').style.display = 'none';
+            }
+
+            updateResponse(text) {
+                document.getElementById('response').textContent = text;
             }
 
             generateConversationId() {
@@ -660,16 +710,6 @@
         window.addEventListener('load', () => {
             slashPanda = new SlashPandaAssistant();
         });
-
-        function toggleListening() {
-            if (!slashPanda) return;
-            
-            if (slashPanda.isListening) {
-                slashPanda.stopListening();
-            } else {
-                slashPanda.startListening();
-            }
-        }
     </script>
 </body>
 </html>
